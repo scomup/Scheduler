@@ -26,14 +26,16 @@ class Schedule_state
     int16_t get_schedulable_time(int16_t id);
     int16_t get_node_predict_finished_time(std::vector<Node> &nodes, int16_t id);
     void predict_finished_time(std::vector<Node> &nodes);
+    void clac_bubble(std::vector<Node> &nodes);
     int16_t get_finished_node_num();
     
     std::vector<int16_t> nodes_finish_time_;
     std::vector<int16_t> cores_ocuppied_time_;
     int16_t pre_time_;
+    int16_t bubble_;
 };
 Schedule_state::Schedule_state(const Schedule_state &state)
-    : nodes_finish_time_(state.nodes_finish_time_), cores_ocuppied_time_(state.cores_ocuppied_time_),pre_time_(state.pre_time_)
+    : nodes_finish_time_(state.nodes_finish_time_), cores_ocuppied_time_(state.cores_ocuppied_time_),pre_time_(state.pre_time_),bubble_(state.bubble_)
 {
 }
 
@@ -47,6 +49,7 @@ Schedule_state::Schedule_state(std::vector<Node> &nodes, int16_t core_num)
     std::fill(cores_ocuppied_time_.begin(), cores_ocuppied_time_.end(), 0);
     update_schedulable_time(nodes);
     predict_finished_time(nodes);
+    clac_bubble(nodes);
 
 }
 
@@ -132,11 +135,30 @@ void Schedule_state::set_finished_node(std::vector<Node> &nodes, int16_t node_id
     nodes_finish_time_[node_id] = schedulabe_time + nodes[node_id].time;
     update_schedulable_time(nodes);
     predict_finished_time(nodes);
+    clac_bubble(nodes);
 }
 
 void Schedule_state::predict_finished_time(std::vector<Node> &nodes)
 {
     pre_time_ = get_node_predict_finished_time(nodes, nodes.size()-1);
+}
+
+void Schedule_state::clac_bubble(std::vector<Node> &nodes)
+{
+    int16_t all_scheduled_task_time = 0;
+    int16_t all_core_task_time = 0;
+    for (int16_t i = 0; i < nodes.size(); i++)
+    {
+        if (nodes_finish_time_[i] > inf){
+            all_scheduled_task_time += nodes[i].time * nodes[i].core_num;
+        }
+    }
+    for (int16_t i = 0; i < cores_ocuppied_time_.size(); i++)
+    {
+        all_core_task_time += cores_ocuppied_time_[i];
+    }
+    bubble_ = all_core_task_time - all_scheduled_task_time;
+
 }
 
 int16_t Schedule_state::get_node_predict_finished_time(std::vector<Node> &nodes, int16_t id)
