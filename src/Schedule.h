@@ -38,11 +38,12 @@ private:
   int16_t cmapare(std::shared_ptr<Schedule_state> &a, std::shared_ptr<Schedule_state> &b);
   void generate_sub_state(std::shared_ptr<Schedule_state> &state_ptr);
   bool generate_from_frontier();
+  void add_to_frontier(std::shared_ptr<Schedule_state> &new_state);  
 
   std::vector<Node> Nodes_;
   std::vector<int16_t> cores_ocuppied_time_;
   std::vector<std::map<size_t, std::list<std::shared_ptr<Schedule_state>>>> dictionary;
-  std::list<std::shared_ptr<Schedule_state>> frontier_;
+  std::map<int16_t,std::list<std::shared_ptr<Schedule_state>>> frontier_;
   Best_state best_state;
 };
 
@@ -62,12 +63,26 @@ void Schedule::solve()
     finished = generate_from_frontier();
 }
 
+void Schedule::add_to_frontier(std::shared_ptr<Schedule_state> &new_state)
+{
+  auto itrr = frontier_.find(new_state->pre_time_);
+  if (itrr == frontier_.end()){
+    std::list<std::shared_ptr<Schedule_state>> state_list;
+    state_list.emplace_back(new_state);
+    frontier_[new_state->pre_time_] = state_list;
+  }
+  else{
+    frontier_[new_state->pre_time_].emplace_back(new_state);  
+  }
+}
+
 void Schedule::add_state_by_check_dict(std::shared_ptr<Schedule_state> &new_state)
 {
+  
   int16_t finished_node_num = new_state->get_finished_node_num();
   auto unscheduled = new_state->get_unscheduled();
   size_t key = boost::hash_range(unscheduled->begin(), unscheduled->end());
-  if (unscheduled->size() == 0)
+  if (new_state->nodes_finish_time_[51] != inf)
   {
     int16_t best_time = new_state->pre_time_;
     if (!best_state.done || (best_state.done && best_state.time > best_time))
@@ -85,34 +100,35 @@ void Schedule::add_state_by_check_dict(std::shared_ptr<Schedule_state> &new_stat
   if (itr == level_dict.end())
   {
     std::list<std::shared_ptr<Schedule_state>> state_list;
-    frontier_.emplace_back(new_state);
-    state_list.emplace_back(new_state);
-    level_dict[key] = std::move(state_list);
+    level_dict[key].emplace_back(new_state);
+    add_to_frontier(new_state);
   }
   else
   {
     auto &v = (level_dict[key]);
     check_new(v, new_state);
   }
-}
-
-bool myt_lt(const std::shared_ptr<Schedule_state> &left,
-            const std::shared_ptr<Schedule_state> &right)
-{
-  return (left.get()->pre_time_ < right.get()->pre_time_);
+  
 }
 
 bool Schedule::generate_from_frontier()
 {
+  auto p0 = std::chrono::system_clock::now();
   static size_t level = 0;
   level++;
 
-  size_t active_frontier_size = 0;
-  auto it = frontier_.begin();
-  frontier_.sort(myt_lt);
-  int16_t finished_node_num = frontier_.front()->get_finished_node_num();
-  //frontier_.sort([](const std::shared_ptr<Schedule_state> &left, const std::shared_ptr<Schedule_state> &right){return left.get()->pre_time_ < right.get()->pre_time_;});
-  int16_t min_bubble = frontier_.front()->pre_time_;
+  auto& current_frontier = frontier_.begin()->second;
+  int16_t best_time = frontier_.begin()->first;
+  size_t active_frontier_size = current_frontier.size();
+
+  //std::cout 
+  //          << "   :elapsed time = " << std::chrono::duration_cast<std::chrono::milliseconds>(diff1).count()
+  //          << std::endl;
+
+
+
+  int16_t current_node_num = current_frontier.front()->get_finished_node_num();
+  //frontier_.sort([](const std::shared_ptr<Schedule_state> &left, const std::shared_ptr<Schedule_state> &right){return left.get()->x < right.get()->x;});
   if (best_state.done)
   {
     //std::cout << min_frontier_time<<best_state.bubble<<std::endl;
@@ -122,25 +138,29 @@ bool Schedule::generate_from_frontier()
               << std::endl;
     return true;
   }
-  size_t frontier_size = frontier_.size();
 
-  it = frontier_.begin();
-  for (size_t i = 0; i < frontier_size; i++)
+  auto it = current_frontier.begin();
+  for (size_t i = 0; i < active_frontier_size; i++)
   {
-    if (min_bubble != (*it)->pre_time_)
-    {
-      break;
-    }
     generate_sub_state((*it));
-    //frontier_.erase(it++);
-
     it++;
-    active_frontier_size++;
   }
-  auto b = frontier_.begin();
-  auto e = frontier_.begin();
+  auto b = current_frontier.begin();
+  auto e = current_frontier.begin();
   std::advance(e, active_frontier_size);
-  frontier_.erase(b, e);
+  current_frontier.erase(b, e);
+  if(current_frontier.size() == 0){
+    frontier_.erase(best_time);
+  }
+  size_t frontier_size = 0;
+  for (auto &m : frontier_ )
+  {
+    frontier_size += m.second.size();
+    it++;
+  }
+
+  auto p2= std::chrono::system_clock::now();
+  auto diff2 = p2 - p0;
 
   std::cout << level
             << ": froniter:"
@@ -148,10 +168,13 @@ bool Schedule::generate_from_frontier()
             << "   active froniter:"
             << active_frontier_size
             << "   best:"
-            << min_bubble
+            << best_time
             << "   fnum:"
-            << finished_node_num
+            << current_node_num
+            << "   :elapsed time = " << std::chrono::duration_cast<std::chrono::seconds>(diff2).count()
             << std::endl;
+
+          
   return false;
   //frontier_.sort([]( std::shared_ptr<Schedule_state> const& left, std::shared_ptr<Schedule_state> const& right){
   //    return (*left).pre_time_ < (*right).pre_time_;});
@@ -159,14 +182,38 @@ bool Schedule::generate_from_frontier()
 
 void Schedule::generate_sub_state(std::shared_ptr<Schedule_state> &state_ptr)
 {
+
   int16_t nodes_num = Nodes_.size();
+  std::list<std::pair<int16_t,int16_t>> schedulable;
+  int16_t min_finished_time = 10000;
   for (int16_t id = 0; id < nodes_num; id++)
   {
     int16_t schedulabe_time = state_ptr->get_schedulable_time(id);
-    if (schedulabe_time == inf)
+    if (schedulabe_time == inf){
       continue;
+    }
+    int16_t tmp = schedulabe_time + Nodes_[id].time;
+    min_finished_time = std::min(min_finished_time, tmp);
+    schedulable.push_back(std::make_pair(id,schedulabe_time));
+  }
+  schedulable.sort([](const std::pair<int16_t,int16_t>& a, const  std::pair<int16_t,int16_t>& b){return a.second < a.second;});
+  int16_t min_schedulabe_time = schedulable.front().second;
+  for (auto it = schedulable.begin(); it != schedulable.end(); it++)
+  {
+    if(min_schedulabe_time == (*it).second && Nodes_[(*it).first].core_num == 4){
+      schedulable.clear();
+      schedulable.push_back((*it));
+      break;
+    }
+    if(min_schedulabe_time >= min_finished_time){
+      schedulable.erase(it++);
+    }
+    
+  }
+  for (auto &m : schedulable)
+  {
     auto sub_state_ptr = std::make_shared<Schedule_state>(*state_ptr);
-    sub_state_ptr->set_finished_node(Nodes_, id, schedulabe_time);
+    sub_state_ptr->set_finished_node(Nodes_, m.first, m.second);
     add_state_by_check_dict(sub_state_ptr);
   }
 }
@@ -192,7 +239,8 @@ void Schedule::check_new(std::list<std::shared_ptr<Schedule_state>> &list, std::
     }
   }
   list.emplace_back(target);
-  frontier_.emplace_back(target);
+  add_to_frontier(target);
+
 }
 
 int16_t Schedule::cmapare(std::shared_ptr<Schedule_state> &a, std::shared_ptr<Schedule_state> &b)
@@ -208,13 +256,13 @@ int16_t Schedule::cmapare(std::shared_ptr<Schedule_state> &a, std::shared_ptr<Sc
     }
     const int16_t schedulable_time_a = -a->nodes_finish_time_[i] + offset_time;
     const int16_t schedulable_time_b = -b->nodes_finish_time_[i] + offset_time;
-    bool better_part = schedulable_time_a > schedulable_time_b;
-    bool worse_part = schedulable_time_a < schedulable_time_b;
+    bool better_part = schedulable_time_a < schedulable_time_b;
+    bool worse_part = schedulable_time_a > schedulable_time_b;
     better |= better_part;
     worse |= worse_part;
   }
-  bool select_a = !worse && better;
-  bool select_b = (worse && !better) || (!worse && !better);
+  bool select_a = (!worse && better)  || (!worse && !better);
+  bool select_b = (worse && !better);
   if (select_a)
     return -1;
   else if (select_b)

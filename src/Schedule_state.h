@@ -49,7 +49,7 @@ Schedule_state::Schedule_state(std::vector<Node> &nodes, int16_t core_num)
     std::fill(cores_ocuppied_time_.begin(), cores_ocuppied_time_.end(), 0);
     update_schedulable_time(nodes);
     predict_finished_time(nodes);
-    clac_bubble(nodes);
+    //clac_bubble(nodes);
 
 }
 
@@ -71,7 +71,7 @@ std::unique_ptr<std::vector<int16_t>> Schedule_state::get_unscheduled()
 
     for (int16_t i = 0; i < nodes_num; i++)
     {
-        if (nodes_finish_time_[i] == inf)
+        if (nodes_finish_time_[i] <= inf)
         {
             p_unscheduled->push_back(i);
         }
@@ -135,25 +135,42 @@ void Schedule_state::set_finished_node(std::vector<Node> &nodes, int16_t node_id
     nodes_finish_time_[node_id] = schedulabe_time + nodes[node_id].time;
     update_schedulable_time(nodes);
     predict_finished_time(nodes);
-    clac_bubble(nodes);
+    //clac_bubble(nodes);
 }
 
 void Schedule_state::predict_finished_time(std::vector<Node> &nodes)
 {
-    pre_time_ = get_node_predict_finished_time(nodes, nodes.size()-1);
+    int16_t pre_time_1 = get_node_predict_finished_time(nodes, nodes.size()-1);
+
+    int16_t all_unscheduled_task_time = 0;
+    int16_t all_core_task_time = 0;
+    size_t core_num = cores_ocuppied_time_.size();
+    for (size_t i = 0; i < nodes.size(); i++)
+    {
+        if (nodes_finish_time_[i] <= inf){
+            all_unscheduled_task_time += nodes[i].time * nodes[i].core_num;
+        }
+    }
+    for (size_t i = 0; i < core_num; i++)
+    {
+        all_core_task_time += cores_ocuppied_time_[i];
+    }
+    int16_t pre_time2 = std::ceil(double(all_core_task_time + all_unscheduled_task_time) / double(core_num));
+
+    pre_time_ = std::max(pre_time_1, pre_time2);
 }
 
 void Schedule_state::clac_bubble(std::vector<Node> &nodes)
 {
     int16_t all_scheduled_task_time = 0;
     int16_t all_core_task_time = 0;
-    for (int16_t i = 0; i < nodes.size(); i++)
+    for (size_t i = 0; i < nodes.size(); i++)
     {
         if (nodes_finish_time_[i] > inf){
             all_scheduled_task_time += nodes[i].time * nodes[i].core_num;
         }
     }
-    for (int16_t i = 0; i < cores_ocuppied_time_.size(); i++)
+    for (size_t i = 0; i < cores_ocuppied_time_.size(); i++)
     {
         all_core_task_time += cores_ocuppied_time_[i];
     }
