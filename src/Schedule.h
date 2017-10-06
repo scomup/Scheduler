@@ -45,6 +45,7 @@ private:
   std::vector<std::map<size_t, std::list<std::shared_ptr<Schedule_state>>>> dictionary;
   std::map<int16_t,std::list<std::shared_ptr<Schedule_state>>> frontier_;
   Best_state best_state;
+  int16_t pre_time_worst_;
 };
 
 Schedule::Schedule(std::vector<Node> Nodes, int16_t core_num)
@@ -54,6 +55,7 @@ Schedule::Schedule(std::vector<Node> Nodes, int16_t core_num)
   dictionary.resize(Nodes.size());
   add_state_by_check_dict(init_state_ptr);
   best_state.done = false;
+  pre_time_worst_ = 10000;
 }
 
 void Schedule::solve()
@@ -169,6 +171,8 @@ bool Schedule::generate_from_frontier()
             << active_frontier_size
             << "   best:"
             << best_time
+            << "   worst:"
+            << pre_time_worst_
             << "   fnum:"
             << current_node_num
             << "   :elapsed time = " << std::chrono::duration_cast<std::chrono::seconds>(diff2).count()
@@ -214,6 +218,10 @@ void Schedule::generate_sub_state(std::shared_ptr<Schedule_state> &state_ptr)
   {
     auto sub_state_ptr = std::make_shared<Schedule_state>(*state_ptr);
     sub_state_ptr->set_finished_node(Nodes_, m.first, m.second);
+    if(sub_state_ptr->pre_time_worst_ < pre_time_worst_){
+      pre_time_worst_ = sub_state_ptr->pre_time_worst_;
+
+    }
     add_state_by_check_dict(sub_state_ptr);
   }
 }

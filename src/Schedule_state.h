@@ -32,10 +32,10 @@ class Schedule_state
     std::vector<int16_t> nodes_finish_time_;
     std::vector<int16_t> cores_ocuppied_time_;
     int16_t pre_time_;
-    int16_t bubble_;
+    int16_t pre_time_worst_;
 };
 Schedule_state::Schedule_state(const Schedule_state &state)
-    : nodes_finish_time_(state.nodes_finish_time_), cores_ocuppied_time_(state.cores_ocuppied_time_),pre_time_(state.pre_time_),bubble_(state.bubble_)
+    : nodes_finish_time_(state.nodes_finish_time_), cores_ocuppied_time_(state.cores_ocuppied_time_),pre_time_(state.pre_time_),pre_time_worst_(state.pre_time_worst_)
 {
 }
 
@@ -158,6 +158,33 @@ void Schedule_state::predict_finished_time(std::vector<Node> &nodes)
     int16_t pre_time2 = std::ceil(double(all_core_task_time + all_unscheduled_task_time) / double(core_num));
 
     pre_time_ = std::max(pre_time_1, pre_time2);
+
+    std::vector<int16_t> cores_ocuppied_time_tmp(cores_ocuppied_time_);
+    //cores_ocuppied_time_tmp = cores_ocuppied_time_;
+    for (size_t i = 0; i < nodes.size(); i++)
+    {
+        if (nodes_finish_time_[i] <= inf){
+            int16_t schedulabe_time = 0;
+            for (int16_t j = 0; j < nodes[i].sub_nodes.size(); j++)
+            {
+                schedulabe_time = std::max(nodes[i].sub_nodes[j],schedulabe_time);
+            }
+
+            int16_t core_num = nodes[i].core_num;
+            std::sort(cores_ocuppied_time_tmp.begin(),cores_ocuppied_time_tmp.end());
+            schedulabe_time = std::max(schedulabe_time, cores_ocuppied_time_tmp[core_num - 1]);
+
+            for (int16_t j = 0; j < nodes[i].core_num; j++)
+            {
+                cores_ocuppied_time_tmp[j] = schedulabe_time + nodes[i].time;
+            }
+        }
+    }
+    std::sort(cores_ocuppied_time_tmp.begin(),cores_ocuppied_time_tmp.end());
+    pre_time_worst_ = cores_ocuppied_time_tmp.back();
+
+
+
 }
 
 void Schedule_state::clac_bubble(std::vector<Node> &nodes)
@@ -174,7 +201,7 @@ void Schedule_state::clac_bubble(std::vector<Node> &nodes)
     {
         all_core_task_time += cores_ocuppied_time_[i];
     }
-    bubble_ = all_core_task_time - all_scheduled_task_time;
+    pre_time_worst_ = all_core_task_time - all_scheduled_task_time;
 
 }
 
